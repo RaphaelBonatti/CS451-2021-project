@@ -2,10 +2,14 @@
 #include <iostream>
 #include <thread>
 
-#include "parser.hpp"
 #include "hello.h"
+#include "parser.hpp"
 #include <signal.h>
+#include <io_handler.h>
 
+#define EVENTS_SIZE 256
+
+char *events;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -37,8 +41,9 @@ int main(int argc, char **argv) {
   std::cout << std::endl;
 
   std::cout << "My PID: " << getpid() << "\n";
-  std::cout << "From a new terminal type `kill -SIGINT " << getpid() << "` or `kill -SIGTERM "
-            << getpid() << "` to stop processing packets\n\n";
+  std::cout << "From a new terminal type `kill -SIGINT " << getpid()
+            << "` or `kill -SIGTERM " << getpid()
+            << "` to stop processing packets\n\n";
 
   std::cout << "My ID: " << parser.id() << "\n\n";
 
@@ -64,6 +69,10 @@ int main(int argc, char **argv) {
   std::cout << parser.configPath() << "\n\n";
 
   std::cout << "Doing some initialization...\n\n";
+  struct ConfigInfo configInfo;
+  init_config_info(&configInfo, parser.configPath());
+
+  // events = calloc()
 
   std::cout << "Broadcasting and delivering messages...\n\n";
 
