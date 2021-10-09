@@ -1,15 +1,27 @@
 #include <chrono>
 #include <iostream>
+#include <signal.h>
 #include <thread>
 
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #include "hello.h"
+#include "io_handler.h"
+#include "network_handler.h"
 #include "parser.hpp"
-#include <signal.h>
-#include <io_handler.h>
 
 #define EVENTS_SIZE 256
+#define FILENAME_SIZE 256
 
-char *events;
+// TODO: make it dynamic; is it is ok to use global variable?
+char events[EVENTS_SIZE] = {0};
+// TODO: is there another way to access it?
+int host_id = 0;
+char filename[FILENAME_SIZE] = {0};
+int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 static void stop(int) {
   // reset signal handlers to default
@@ -18,9 +30,14 @@ static void stop(int) {
 
   // immediately stop network packet processing
   std::cout << "Immediately stopping network packet processing.\n";
+  close(sock_fd);
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
+  // TODO: ask if this name is ok
+  // char filename[FILENAME_SIZE] = {0};
+  // snprintf(filename, FILENAME_SIZE, "%d", host_id);
+  write_output(events, filename);
 
   // exit directly from signal handler
   exit(0);
@@ -71,11 +88,20 @@ int main(int argc, char **argv) {
   std::cout << "Doing some initialization...\n\n";
   struct ConfigInfo configInfo;
   init_config_info(&configInfo, parser.configPath());
-
-  // events = calloc()
+  strncpy(filename, parser.outputPath(), FILENAME_SIZE - 1);
 
   std::cout << "Broadcasting and delivering messages...\n\n";
 
+  struct sockaddr_in receiver_addr, sender_addr;
+  receiver_addr.sin_family = AF_INET;
+  printf("index %lu\n.", configInfo.receiver_id - 1);
+  receiver_addr.sin_port = hosts[configInfo.receiver_id - 1].port;
+  receiver_addr.sin_addr.s_addr = hosts[configInfo.receiver_id - 1].ip;
+
+  printf("Start running.");
+  run(receiver_addr, sock_fd, configInfo, events, parser.id());
+
+  printf("Run ended.");
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
   while (true) {
