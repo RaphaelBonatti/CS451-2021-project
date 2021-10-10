@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define EVENTS_MAX 256
+
 void init_config_info(struct ConfigInfo *configInfo, const char *filename) {
   FILE *fp;
 
@@ -25,12 +27,13 @@ void init_config_info(struct ConfigInfo *configInfo, const char *filename) {
 void write_output(const char *log_events, const char *filename) {
   FILE *fp;
 
-  printf("Creating %s file", filename);
+  printf("Creating %s file\n", filename);
   if ((fp = fopen(filename, "w")) == NULL) {
     printf("Error! could not open the file");
     exit(1);
   }
 
+  printf("Will write: '%s'\n", log_events);
   if (fprintf(fp, "%s", log_events) < 0) {
     printf("Error! could not write to file");
     exit(1);
@@ -52,8 +55,10 @@ void log_events(char *events, const char *event) {
 
   // TODO: Dynamic allocation
   size_t events_byte_size = malloc_usable_size(events);
-  size_t events_string_size = strlen(events);
-  strncat(events, event, events_byte_size - events_string_size);
+  size_t events_string_size = strlen(event);
+  strncat(events, event, EVENTS_MAX - events_string_size);
+  printf("left size: %lu,\n Event:\n'%s',\n Events:\n'%s'\n",
+         EVENTS_MAX - events_string_size, event, events);
 }
 
 int is_receiver(unsigned long receiver_id, unsigned long host_id) {

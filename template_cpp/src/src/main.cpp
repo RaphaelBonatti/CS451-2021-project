@@ -13,13 +13,18 @@
 #include "network_handler.h"
 #include "parser.hpp"
 
+// TODO: DEL
+#include <unistd.h>
+#define GetCurrentDir getcwd
+using namespace std;
+
 #define EVENTS_SIZE 256
 #define FILENAME_SIZE 256
+#define N_PROCESS 3
 
-// TODO: make it dynamic; is it is ok to use global variable?
+// TODO: make it dynamic. Is it is ok to use global variable?
 char events[EVENTS_SIZE] = {0};
 // TODO: is there another way to access it?
-int host_id = 0;
 char filename[FILENAME_SIZE] = {0};
 int sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
@@ -64,6 +69,15 @@ int main(int argc, char **argv) {
 
   std::cout << "My ID: " << parser.id() << "\n\n";
 
+  // TODO: DEL
+  char buff[FILENAME_MAX];
+  char *cwd = getcwd(buff, FILENAME_MAX);
+  cout << buff << endl;
+
+  size_t n_process = parser.hosts().size();
+  struct ProcessInfo processInfos[N_PROCESS];
+  uint i = 0;
+
   std::cout << "List of resolved hosts is:\n";
   std::cout << "==========================\n";
   auto hosts = parser.hosts();
@@ -74,6 +88,13 @@ int main(int argc, char **argv) {
     std::cout << "Human-readbale Port: " << host.portReadable() << "\n";
     std::cout << "Machine-readbale Port: " << host.port << "\n";
     std::cout << "\n";
+
+    processInfos[i].id = host.id;
+    processInfos[i].ip = host.ip;
+    processInfos[i].port = host.port;
+    // (*processInfos)[i].id = host.id;
+    // (*processInfos)[i].ip = host.ip;
+    // (*processInfos)[i].port = host.port;
   }
   std::cout << "\n";
 
@@ -94,12 +115,14 @@ int main(int argc, char **argv) {
 
   struct sockaddr_in receiver_addr, sender_addr;
   receiver_addr.sin_family = AF_INET;
-  printf("index %lu\n.", configInfo.receiver_id - 1);
   receiver_addr.sin_port = hosts[configInfo.receiver_id - 1].port;
   receiver_addr.sin_addr.s_addr = hosts[configInfo.receiver_id - 1].ip;
+  printf("port: %d, ip: %u", receiver_addr.sin_port,
+         receiver_addr.sin_addr.s_addr);
 
   printf("Start running.");
-  run(receiver_addr, sock_fd, configInfo, events, parser.id());
+  run(receiver_addr, sock_fd, configInfo, events, parser.id(), processInfos,
+      n_process);
 
   printf("Run ended.");
   // After a process finishes broadcasting,

@@ -76,6 +76,7 @@ public:
           ptr =
               &(reinterpret_cast<struct sockaddr_in *>(res->ai_addr))->sin_addr;
           inet_ntop(res->ai_family, ptr, addrstr, 128);
+          freeaddrinfo(res);
           return inet_addr(addrstr);
           break;
         // case AF_INET6:
@@ -86,6 +87,9 @@ public:
         }
         res = res->ai_next;
       }
+
+      printf("Parser error! freeing now...\n");
+      freeaddrinfo(res);
 
       throw std::runtime_error("No host resolves to IPv4");
     }

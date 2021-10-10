@@ -4,6 +4,7 @@
 extern "C" {
 #endif
 
+#include <netinet/in.h>
 #include <stdlib.h>
 
 /**
@@ -11,14 +12,20 @@ extern "C" {
  *
  */
 struct ConfigInfo {
-  unsigned long n_messages;
-  unsigned long receiver_id;
+  size_t n_messages;
+  size_t receiver_id;
+};
+
+struct ProcessInfo {
+  size_t id;
+  in_addr_t ip;
+  unsigned short port;
 };
 
 void init_config_info(struct ConfigInfo *configInfo, const char *filename);
 void write_output(const char *log, const char *filename);
 void log_events(char *events, const char *event);
-int is_receiver(unsigned long receiver_id, long unsigned host_id);
+int is_receiver(size_t receiver_id, size_t host_id);
 
 #ifdef __cplusplus
 }

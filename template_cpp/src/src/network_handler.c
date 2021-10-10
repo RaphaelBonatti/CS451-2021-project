@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <string.h>
 
@@ -11,23 +10,34 @@
 #include "network_handler.h"
 
 #define MESSAGE_SIZE 256
-#define EVENT_SIZE 256
+#define EVENT_SIZE 512
+
+size_t find_id(struct sockaddr_in *addr, struct ProcessInfo *processInfos,
+               size_t n_process) {
+  for (size_t i = 0; i < n_process; i++) {
+    if (addr->sin_addr.s_addr == processInfos[i].ip &&
+        addr->sin_port == processInfos[i].port) {
+      return processInfos[i].id;
+    }
+  }
+
+  return 0;
+}
 
 void run(struct sockaddr_in receiver_addr, int sock_fd,
-         struct ConfigInfo configInfo, char *events, unsigned long process_id) {
-  printf("Inside run.");
+         struct ConfigInfo configInfo, char *events, size_t process_id,
+         struct ProcessInfo *processInfos, size_t n_process) {
+  printf("Inside run.\n");
   char event[EVENT_SIZE] = {0};
-  // TODO: starts at 1?
-  int seq_n = 1;
-  char buffer[MESSAGE_SIZE];
+  char buffer[MESSAGE_SIZE] = {0};
   struct sockaddr_in sender_addr;
 
-  printf("Check sock failure.");
+  printf("Check sock failure.\n");
   // TODO: check sock failure
 
   if (is_receiver(configInfo.receiver_id, process_id)) {
     // TODO: listen to messages
-    int sender_id = 0;
+    size_t sender_id = 0;
 
     int bind_check = bind(sock_fd, (const struct sockaddr *)&receiver_addr,
                           sizeof(receiver_addr));
@@ -37,31 +47,38 @@ void run(struct sockaddr_in receiver_addr, int sock_fd,
 
     // TODO: use while true?
     while (1) {
-      printf("Receiving...");
+      printf("Receiving...\n");
       ssize_t n = recvfrom(sock_fd, buffer, MESSAGE_SIZE, 0,
                            (struct sockaddr *)&sender_addr, &sender_len);
 
-      ++seq_n;
+      sender_id = find_id(&sender_addr, processInfos, n_process);
 
       // Received
-      snprintf(event, EVENT_SIZE, "d %d %d\n", sender_id, seq_n);
+      printf("buffer : '%s'\n", buffer);
+      snprintf(event, EVENT_SIZE, "d %lu %s\n", sender_id, buffer);
+      printf("log: '%s'\n", event);
       log_events(events, event);
     }
 
   } else {
-    // TODO: send messages, content is seq_n
+    // TODO: starts at 1?
+    size_t seq_n = 1;
 
     for (size_t i = 0; i < configInfo.n_messages; i++) {
-      printf("Sending...");
-      snprintf(event, EVENT_SIZE, "b %d\n", seq_n);
+      printf("Sending...\n");
+
+      snprintf(buffer, MESSAGE_SIZE, "%lu", seq_n);
       socklen_t receiver_len = sizeof(receiver_addr);
-      ssize_t send_check = sendto(sock_fd, event, strlen(event), 0,
-                                  (struct sockaddr *)&sock_fd, receiver_len);
+      ssize_t send_check =
+          sendto(sock_fd, buffer, strlen(buffer), 0,
+                 (struct sockaddr *)&receiver_addr, receiver_len);
       // TODO: check send failure
 
-      ++seq_n;
+      printf("sent: %ld bytes\n", send_check);
+      snprintf(event, EVENT_SIZE, "b %lu\n", seq_n);
       // Sent
       log_events(events, event);
+      ++seq_n;
     }
   }
 }
