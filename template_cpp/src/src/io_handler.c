@@ -24,7 +24,7 @@ void init_config_info(struct ConfigInfo *configInfo, const char *filename) {
   fclose(fp);
 }
 
-void write_output(const char *log_events, const char *filename) {
+void write_output(const char *events, const char *filename) {
   FILE *fp;
 
   // printf("Creating %s file\n", filename);
@@ -33,8 +33,8 @@ void write_output(const char *log_events, const char *filename) {
     exit(1);
   }
 
-  // printf("Will write: '%s'\n", log_events);
-  if (fprintf(fp, "%s", log_events) < 0) {
+  // printf("Will write: '%s'\n", events);
+  if (fprintf(fp, "%s", events) < 0) {
     printf("Error! could not write to file");
     exit(1);
   }
