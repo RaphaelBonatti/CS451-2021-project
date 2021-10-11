@@ -18,9 +18,9 @@
 #define GetCurrentDir getcwd
 using namespace std;
 
-#define EVENTS_SIZE 256
+#define EVENTS_SIZE 8192
 #define FILENAME_SIZE 256
-#define N_PROCESS 3
+#define N_PROCESS 9
 
 // TODO: make it dynamic. Is it is ok to use global variable?
 char events[EVENTS_SIZE] = {0};
@@ -95,6 +95,7 @@ int main(int argc, char **argv) {
     // (*processInfos)[i].id = host.id;
     // (*processInfos)[i].ip = host.ip;
     // (*processInfos)[i].port = host.port;
+    i++;
   }
   std::cout << "\n";
 
@@ -113,16 +114,15 @@ int main(int argc, char **argv) {
 
   std::cout << "Broadcasting and delivering messages...\n\n";
 
-  struct sockaddr_in receiver_addr, sender_addr;
-  receiver_addr.sin_family = AF_INET;
-  receiver_addr.sin_port = hosts[configInfo.receiver_id - 1].port;
-  receiver_addr.sin_addr.s_addr = hosts[configInfo.receiver_id - 1].ip;
-  printf("port: %d, ip: %u", receiver_addr.sin_port,
-         receiver_addr.sin_addr.s_addr);
+  // struct sockaddr_in receiver_addr, sender_addr;
+  // receiver_addr.sin_family = AF_INET;
+  // receiver_addr.sin_port = hosts[configInfo.receiver_id - 1].port;
+  // receiver_addr.sin_addr.s_addr = hosts[configInfo.receiver_id - 1].ip;
+  // printf("port: %d, ip: %u", receiver_addr.sin_port,
+  //        receiver_addr.sin_addr.s_addr);
 
   printf("Start running.");
-  run(receiver_addr, sock_fd, configInfo, events, parser.id(), processInfos,
-      n_process);
+  run(sock_fd, configInfo, events, parser.id(), processInfos, n_process);
 
   printf("Run ended.");
   // After a process finishes broadcasting,

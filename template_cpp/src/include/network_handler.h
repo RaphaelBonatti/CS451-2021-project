@@ -10,11 +10,19 @@ extern "C" {
 #include <sys/types.h>
 
 #include "io_handler.h"
-size_t find_id(struct sockaddr_in *addr, struct ProcessInfo *processInfos,
-               size_t n_process);
-void run(struct sockaddr_in receiver_addr, int sock_fd,
-         struct ConfigInfo configInfo, char *events, size_t process_id,
-         struct ProcessInfo *processInfos, size_t n_process);
+
+struct ProcessInfo {
+  size_t id;
+  in_addr_t ip;
+  in_port_t port;
+};
+
+size_t get_id_by_sockaddr(struct sockaddr_in *addr,
+                          struct ProcessInfo *processInfos, size_t n_process);
+void get_sockaddr_by_id(struct sockaddr_in *sockaddr, size_t id,
+                        struct ProcessInfo *processInfos, size_t n_process);
+void run(int sock_fd, struct ConfigInfo configInfo, char *events,
+         size_t process_id, struct ProcessInfo *processInfos, size_t n_process);
 
 #ifdef __cplusplus
 }

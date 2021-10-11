@@ -16,12 +16,6 @@ struct ConfigInfo {
   size_t receiver_id;
 };
 
-struct ProcessInfo {
-  size_t id;
-  in_addr_t ip;
-  unsigned short port;
-};
-
 void init_config_info(struct ConfigInfo *configInfo, const char *filename);
 void write_output(const char *log, const char *filename);
 void log_events(char *events, const char *event);
