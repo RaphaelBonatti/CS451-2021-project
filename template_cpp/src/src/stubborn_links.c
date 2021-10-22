@@ -5,19 +5,25 @@
 
 #include <stubborn_links.h>
 
+pthread_t tlistener;
+
 void *sl_receive_ack(void *_args) {
   struct Args *args = (struct Args *)_args;
   char ack_buffer[MESSAGE_SIZE + 3] = {0};
   char buffer[MESSAGE_SIZE] = {0};
 
+  // Create the message to confirm
   snprintf(ack_buffer, MESSAGE_SIZE + 3, "ack%s", args->message);
-  // We do not care about the sender (i.e. the receiver) address
+
   do {
+    // We do not care about the sender address in this case,
+    // we just check that the message is the same
     ssize_t n = recvfrom(args->sock_fd, buffer, MESSAGE_SIZE, 0, NULL, 0);
   } while (strncmp(buffer, ack_buffer, strlen(ack_buffer)));
 
+  // set ack to 1 so that main thread is unblocked
   *(args->ack) = 1;
-  pthread_exit(NULL);
+  return NULL;
 }
 
 void sl_send(int sock_fd, struct sockaddr_in *receiver_addr,
@@ -26,16 +32,18 @@ void sl_send(int sock_fd, struct sockaddr_in *receiver_addr,
   struct Args args = {sock_fd, message, &ack};
   pthread_t tlistener;
 
+  // New thread needed to avoid deadlock (thread will wait for ack)
   pthread_create(&tlistener, NULL, sl_receive_ack, (void *)&args);
 
-  // blocking code
+  // blocking code until ack is received
   while (!ack) {
-    // for (size_t i = 0; i < N_SEND; i++) {
     // TODO: check send failure?
     ssize_t send_check =
         sendto(sock_fd, message, strlen(message), 0,
                (struct sockaddr *)receiver_addr, sizeof(*receiver_addr));
   }
+
+  pthread_join(tlistener, NULL);
 }
 
 void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,

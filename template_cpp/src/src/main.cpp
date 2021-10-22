@@ -12,13 +12,11 @@
 #include "io_handler.h"
 #include "network_handler.h"
 #include "parser.hpp"
+#include "stubborn_links.h"
 
-#define EVENTS_SIZE 130000 // 8192
 #define FILENAME_SIZE 256
 #define N_PROCESS 9
 
-// TODO: make it dynamic. Is it is ok to use global variable?
-char events[EVENTS_SIZE] = {0};
 // TODO: is there another way to access it?
 char filename[FILENAME_SIZE] = {0};
 int sock_fd;
@@ -34,7 +32,10 @@ static void stop(int) {
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
-  write_output(events, filename);
+  write_output(filename);
+
+  // Freeing memory
+  destroy_events();
 
   // exit directly from signal handler
   exit(0);
@@ -95,10 +96,11 @@ int main(int argc, char **argv) {
   std::cout << "Doing some initialization...\n\n";
   struct ConfigInfo configInfo;
   init_config_info(&configInfo, parser.configPath());
+  init_events();
   strncpy(filename, parser.outputPath(), FILENAME_SIZE - 1);
 
   std::cout << "Broadcasting and delivering messages...\n\n";
-  run(&sock_fd, &configInfo, events, parser.id(), processInfos, n_process);
+  run(&sock_fd, &configInfo, parser.id(), processInfos, n_process);
 
   std::cout << "Broadcasting finished...\n\n";
   // After a process finishes broadcasting,

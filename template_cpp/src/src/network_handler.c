@@ -39,8 +39,8 @@ void get_sockaddr_by_id(struct sockaddr_in *sockaddr, size_t id,
   }
 }
 
-void run_receiver(int sock_fd, char *events, struct ProcessInfo *processInfos,
-                  size_t n_process, char *buffer, char *event) {
+void run_receiver(int sock_fd, struct ProcessInfo *processInfos,
+                  size_t n_process, char *buffer) {
   struct sockaddr_in sender_addr;
   size_t sender_id = 0;
   // Important to give the size of the struct
@@ -48,20 +48,18 @@ void run_receiver(int sock_fd, char *events, struct ProcessInfo *processInfos,
 
   while (1) {
     // TODO: check receive failure?
+    // Wait for and deliver messages
     pl_deliver(sock_fd, &sender_addr, &sender_len, buffer);
+    // Get sender id
     sender_id = get_id_by_sockaddr(&sender_addr, processInfos, n_process);
-
-    // Clean event to avoid left over chars
-    memset(event, 0, EVENT_SIZE);
-
-    snprintf(event, EVENT_SIZE, "d %lu %s\n", sender_id, buffer);
-    log_events(events, event);
+    // Log the delivered message
+    log_deliver_events(buffer, sender_id);
   }
 }
 
-void run_sender(int sock_fd, struct ConfigInfo *configInfo, char *events,
+void run_sender(int sock_fd, struct ConfigInfo *configInfo,
                 struct ProcessInfo *processInfos, size_t n_process,
-                char *buffer, char *event) {
+                char *buffer) {
   size_t seq_n = 1;
   struct sockaddr_in receiver_addr;
   // TODO: may be useful to use an array of acks
@@ -69,53 +67,55 @@ void run_sender(int sock_fd, struct ConfigInfo *configInfo, char *events,
 
   get_sockaddr_by_id(&receiver_addr, configInfo->receiver_id, processInfos,
                      n_process);
+
   for (size_t i = 0; i < configInfo->n_messages; i++) {
     // Reset buffer and event to avoid left over chars
     memset(buffer, 0, MESSAGE_SIZE);
-    memset(event, 0, EVENT_SIZE);
-
+    // Create message to send
     snprintf(buffer, MESSAGE_SIZE, "%lu", seq_n);
+    // Send message through perfect link
     pl_send(sock_fd, &receiver_addr, buffer);
-    snprintf(event, EVENT_SIZE, "b %lu\n", seq_n);
-    log_events(events, event);
+    // Log the message that was sent
+    log_send_events(buffer);
     ++seq_n;
   }
 }
 
 void run_receiver_sender(int sock_fd, struct ConfigInfo *configInfo,
-                         char *events, size_t process_id,
-                         struct ProcessInfo *processInfos, size_t n_process,
-                         char *buffer, char *event) {
+                         size_t process_id, struct ProcessInfo *processInfos,
+                         size_t n_process, char *buffer) {
   if (is_receiver(configInfo->receiver_id, process_id)) {
-    run_receiver(sock_fd, events, processInfos, n_process, buffer, event);
+    run_receiver(sock_fd, processInfos, n_process, buffer);
   } else {
-    run_sender(sock_fd, configInfo, events, processInfos, n_process, buffer,
-               event);
+    run_sender(sock_fd, configInfo, processInfos, n_process, buffer);
   }
 }
 
-void run(int *sock_fd, struct ConfigInfo *configInfo, char *events,
-         size_t process_id, struct ProcessInfo *processInfos,
-         size_t n_process) {
-  char event[EVENT_SIZE] = {0};
+void run(int *sock_fd, struct ConfigInfo *configInfo, size_t process_id,
+         struct ProcessInfo *processInfos, size_t n_process) {
   char buffer[MESSAGE_SIZE] = {0};
   struct sockaddr_in process_addr;
 
+  // Get network information about current process, assuming IPV4
   get_sockaddr_by_id(&process_addr, process_id, processInfos, n_process);
 
+  // Create UDP socket for the current process
   if ((*sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
     fprintf(stderr, "Error, socket creation failed. errno = %d\n", errno);
     exit(1);
   }
 
+  // Bind the socket to the corresponding address
   if (bind(*sock_fd, (const struct sockaddr *)&process_addr,
            sizeof(process_addr)) < 0) {
     fprintf(stderr, "Error, bind failed. errno = %d\n", errno);
     exit(1);
   }
 
+  // Initialize (or reset) perfect link
   pl_init();
 
-  run_receiver_sender(*sock_fd, configInfo, events, process_id, processInfos,
-                      n_process, buffer, event);
+  // Start receiver or sender, depending on the configuration file
+  run_receiver_sender(*sock_fd, configInfo, process_id, processInfos, n_process,
+                      buffer);
 }
