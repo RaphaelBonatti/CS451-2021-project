@@ -1,8 +1,8 @@
 # DO NAME THE SYMBOLIC VARIABLE `SOURCES`
 
 include_directories(include)
-set(SOURCES src/main.cpp src/hello.c src/io_handler.c src/network_handler.c)
-set(CMAKE_BUILD_TYPE Debug)
+set(SOURCES src/main.cpp src/hello.c src/io_handler.c src/network_handler.c src/stubborn_links.c src/perfect_links.c)
+#set(CMAKE_BUILD_TYPE Debug)
 
 # DO NOT EDIT THE FOLLOWING LINE
 find_package(Threads)
