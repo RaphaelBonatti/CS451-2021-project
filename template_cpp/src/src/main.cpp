@@ -12,6 +12,7 @@
 #include "io_handler.h"
 #include "network_handler.h"
 #include "parser.hpp"
+#include "perfect_links.h"
 #include "stubborn_links.h"
 
 #define FILENAME_SIZE 256
@@ -36,6 +37,7 @@ static void stop(int) {
 
   // Freeing memory
   destroy_events();
+  pl_destroy();
 
   // exit directly from signal handler
   exit(0);
@@ -96,7 +98,11 @@ int main(int argc, char **argv) {
   std::cout << "Doing some initialization...\n\n";
   struct ConfigInfo configInfo;
   init_config_info(&configInfo, parser.configPath());
+
+  // Init temporary log variable
   init_events();
+
+  // Copy filename to global variable, for later use in the signal handler
   strncpy(filename, parser.outputPath(), FILENAME_SIZE - 1);
 
   std::cout << "Broadcasting and delivering messages...\n\n";

@@ -48,10 +48,10 @@ void init_events() {
 void destroy_events() { free(events); }
 
 void realloc_events() {
-  printf("Reallocating!\n");
+  // printf("Reallocating!\n");
   size_t new_size = 2 * events_size;
   char *prev = events;
-  printf("new size %lu\nprev %p\n", new_size, prev);
+  // printf("new size %lu\nprev %p\n", new_size, prev);
   events = realloc(events, new_size * sizeof(char));
   if (!events) {
     printf("Freeing!\n");
@@ -90,10 +90,12 @@ size_t check_available_size(char *buffer) {
 
   size_t used_size = strlen(events);
 
-  if (events_size - used_size < strlen(buffer) + SAFETY_SIZE) {
+  // reallocate while the size is too small
+  while (events_size - used_size < strlen(buffer) + SAFETY_SIZE) {
     realloc_events();
   }
 
+  // return available size
   return events_size - used_size;
 }
 

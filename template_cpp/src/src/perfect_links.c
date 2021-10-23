@@ -1,54 +1,90 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "perfect_links.h"
 #include "stubborn_links.h"
 
-#define N_PACKETS 8192
+#define MAX_PACKETS 100
+#define MAX_BUCKETS 10
+#define MAX_PROCESSES 128
+#define MAX_CHARS 256
+#define INIT_ACK_SIZE 1048576 // 2^20 Bytes
 
-struct Packet delivered[N_PACKETS];
-size_t n_packets;
+struct AckTable {
+  bool *acks;
+  size_t size;
+};
 
-// TODO: will you use it?
-// needed to use nanosleep
-int nanosleep(const struct timespec *rqtp, struct timespec *rmtp);
+// keep a boolean for each message of each process represented by its seq_num
+struct AckTable ack_table[MAX_PROCESSES];
 
-int packet_exists(const char *message, struct sockaddr_in *sender_addr) {
-  for (size_t i = 0; i < n_packets; ++i) {
-    if (strcmp(message, delivered[i].message) == 0 &&
-        sender_addr->sin_addr.s_addr ==
-            delivered[i].sender_addr.sin_addr.s_addr &&
-        sender_addr->sin_port == delivered[i].sender_addr.sin_port) {
-      return 1;
-    }
-  }
-  return 0;
+bool packet_exists(struct sockaddr_in *sender_addr, uint seq_num) {
+  // TODO: generalize the way to get process_num
+  // Determine the bucket that the port hashes to.
+  size_t process_num = ntohs(sender_addr->sin_port) % MAX_PROCESSES;
+  return ack_table[process_num].acks[seq_num];
 }
 
-void pl_init() { n_packets = 0; }
+void pl_init() {
+  for (size_t i = 0; i < MAX_PROCESSES; ++i) {
+    ack_table[i].acks = calloc(INIT_ACK_SIZE, sizeof(bool));
+    ack_table[i].size = INIT_ACK_SIZE;
+  }
+}
+
+void pl_destroy() {
+  for (size_t i = 0; i < MAX_PROCESSES; ++i) {
+    free(ack_table[i].acks);
+  }
+}
+
+void pl_realloc(size_t process_num) {
+  printf("Reallocating!\n");
+  size_t new_size = 2 * ack_table[process_num].size;
+  bool *prev = ack_table[process_num].acks;
+  ack_table[process_num].acks =
+      realloc(ack_table[process_num].acks, new_size * sizeof(bool));
+
+  if (!(ack_table[process_num].acks)) {
+    free(prev);
+    exit(1);
+  }
+
+  ack_table[process_num].size = new_size;
+}
 
 void pl_send(int sock_fd, struct sockaddr_in *receiver_addr,
              const char *message) {
-  sl_send(sock_fd, receiver_addr, message);
+  // Concatenate seq_num and message
+  static uint seq_num = 0;
+  char buffer[MAX_CHARS] = {0};
+  // TODO: Maybe useful to check if it went well
+  snprintf(buffer, MAX_CHARS, "%u|%s", seq_num, message);
 
-  //   struct timespec ts;
-  //   int res = 0;
-  //   int msec = 500;
-  //   ts.tv_sec = msec / 1000;
-  //   ts.tv_nsec = (msec % 1000) * 1000000;
-  //   res = nanosleep(&ts, &ts);
+  // Send the new message
+  sl_send(sock_fd, receiver_addr, buffer);
+  ++seq_num;
 }
 
 void pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                 socklen_t *sender_len, char *message) {
+  static uint seq_num = 0;
+
   do {
     sl_deliver(sock_fd, sender_addr, sender_len, message);
-  } while (packet_exists(message, sender_addr));
-  // Deep copy needed for char*
-  strncpy(delivered[n_packets].message, message, strlen(message));
-  delivered[n_packets].sender_addr.sin_addr.s_addr =
-      sender_addr->sin_addr.s_addr;
-  delivered[n_packets].sender_addr.sin_port = sender_addr->sin_port;
-  ++n_packets;
+    sscanf(message, "%u|%s", &seq_num, message);
+  } while (packet_exists(sender_addr, seq_num));
+
+  size_t process_num = ntohs(sender_addr->sin_port) % MAX_PROCESSES;
+
+  // Check size of the array
+  if (seq_num >= ack_table[process_num].size) {
+    pl_realloc(process_num);
+  }
+
+  // Ack the packet
+  ack_table[process_num].acks[seq_num] = true;
+
+  // // will return the message and sender_addr (and its length)
 }
