@@ -8,14 +8,7 @@ extern "C" {
 
 #include "stubborn_links.h"
 
-typedef unsigned int uint;
-
-struct Packet {
-  uint seq_num;
-  struct sockaddr_in sender_addr;
-};
-
-bool packet_exists(struct sockaddr_in *sender_addr, uint seq_num);
+uint find_process_id(struct sockaddr_in *addr);
 void pl_init();
 void pl_destroy();
 void pl_realloc(size_t process_num);

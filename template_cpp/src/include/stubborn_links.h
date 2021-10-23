@@ -10,7 +10,13 @@ extern "C" {
 #include <sys/types.h>
 
 #define MESSAGE_SIZE 256
+// max uint digits + separator
+#define MAX_HEADER_SIZE 11
+// max chars (without string terminator)
+#define MAX_CHARS 256
 #define N_SEND 1000
+
+typedef unsigned int uint;
 
 struct Args {
   int sock_fd;

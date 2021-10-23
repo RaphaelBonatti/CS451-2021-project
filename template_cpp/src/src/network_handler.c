@@ -73,10 +73,10 @@ void run_sender(int sock_fd, struct ConfigInfo *configInfo,
     memset(buffer, 0, MESSAGE_SIZE);
     // Create message to send
     snprintf(buffer, MESSAGE_SIZE, "%lu", seq_n);
+    // Log the message to send
+    log_send_events(buffer);
     // Send message through perfect link
     pl_send(sock_fd, &receiver_addr, buffer);
-    // Log the message that was sent
-    log_send_events(buffer);
     ++seq_n;
   }
 }
