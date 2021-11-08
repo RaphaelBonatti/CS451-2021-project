@@ -1,7 +1,7 @@
 # DO NAME THE SYMBOLIC VARIABLE `SOURCES`
 
 include_directories(include)
-set(SOURCES src/main.cpp src/hello.c src/io_handler.c src/network_handler.c src/stubborn_links.c src/perfect_links.c)
+set(SOURCES src/main.cpp src/hello.c src/io_handler.c src/fifo_broadcast_application.c src/stubborn_links.c src/perfect_links.c src/best_effort_broadcast.c)
 #set(CMAKE_BUILD_TYPE Debug)
 
 # DO NOT EDIT THE FOLLOWING LINE

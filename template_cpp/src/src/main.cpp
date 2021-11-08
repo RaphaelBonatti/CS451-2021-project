@@ -8,9 +8,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include "fifo_broadcast_application.h"
 #include "hello.h"
 #include "io_handler.h"
-#include "network_handler.h"
 #include "parser.hpp"
 #include "perfect_links.h"
 #include "stubborn_links.h"
@@ -38,6 +38,7 @@ static void stop(int) {
   // Freeing memory
   destroy_events();
   pl_destroy();
+  app_destroy();
 
   // exit directly from signal handler
   exit(0);
@@ -100,7 +101,7 @@ int main(int argc, char **argv) {
   init_config_info(&configInfo, parser.configPath());
 
   // Init temporary log variable
-  init_events();
+  init_io_handler();
 
   // Copy filename to global variable, for later use in the signal handler
   strncpy(filename, parser.outputPath(), FILENAME_SIZE - 1);

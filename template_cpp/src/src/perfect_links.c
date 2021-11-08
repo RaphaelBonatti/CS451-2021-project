@@ -6,8 +6,6 @@
 #include "perfect_links.h"
 #include "stubborn_links.h"
 
-#define MAX_PACKETS 100
-#define MAX_BUCKETS 10
 #define MAX_PROCESSES 128
 #define MAX_PORTS 1000
 #define INIT_ACK_SIZE 1048576 // 2^20 Bytes
@@ -15,10 +13,12 @@
 struct AckTable {
   bool *acks;
   size_t size;
+  uint n_ack;
 };
 
 // keep a boolean for each message of each process represented by its seq_num
 struct AckTable ack_table[MAX_PROCESSES];
+uint seq_num_table[MAX_PROCESSES];
 
 uint find_process_id(struct sockaddr_in *addr) {
   static uint n_process = 1;
@@ -42,6 +42,8 @@ void pl_init() {
   for (size_t i = 0; i < MAX_PROCESSES; ++i) {
     ack_table[i].acks = calloc(INIT_ACK_SIZE, sizeof(bool));
     ack_table[i].size = INIT_ACK_SIZE;
+    ack_table[i].n_ack = 0;
+    seq_num_table[i] = 0;
   }
 }
 
@@ -68,7 +70,9 @@ void pl_realloc(size_t process_index) {
 
 void pl_send(int sock_fd, struct sockaddr_in *receiver_addr,
              const char *message) {
-  static uint seq_num = 0;
+  uint process_index = find_process_id(receiver_addr) - 1;
+  uint seq_num = seq_num_table[process_index];
+
   char buffer[MAX_HEADER_SIZE + MAX_CHARS + 1] = {0};
   char block[MAX_CHARS + 1] = {0};
   const char *cursor = message;
@@ -90,16 +94,28 @@ void pl_send(int sock_fd, struct sockaddr_in *receiver_addr,
 
     // Concatenate seq_num and message
     // TODO: Maybe useful to check if it went well
-    snprintf(buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "%u|%s", seq_num, block);
+    snprintf(buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "m|%u|%s", seq_num,
+             block);
 
     // Send the new message
     sl_send(sock_fd, receiver_addr, buffer);
-    ++seq_num;
+    ++seq_num_table[process_index];
+  }
+}
+
+static void print_ack_table() {
+  for (uint j = 0; j < 4; ++j) {
+    printf("table [%u] : ", j + 1);
+    for (uint i = 0; i < 7; ++i) {
+      printf("%u | ", ack_table[j].acks[i]);
+    }
+    printf("\n");
   }
 }
 
 void pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                 socklen_t *sender_len, char *message) {
+  char type = '\0';
   uint seq_num = 0;
   uint process_index = 0;
 
@@ -107,20 +123,26 @@ void pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
   // sender_addr and seq_num)
   do {
     sl_deliver(sock_fd, sender_addr, sender_len, message);
-    sscanf(message, "%u|%s", &seq_num, message);
-    process_index = find_process_id(sender_addr) - 1;
-  } while (ack_table[process_index].acks[seq_num]);
 
-  // uint process_index = ntohs(sender_addr->sin_port) % MAX_PROCESSES;
-  // printf("%u and %u\n", sender_addr->sin_port, sender_addr->sin_addr.s_addr);
+    // Decode the packet: type | seq | message
+    sscanf(message, "%c|%u|%s", &type, &seq_num, message);
+
+    // only care if it's a message type
+    if (type == 'm') {
+      process_index = find_process_id(sender_addr) - 1;
+    }
+  } while (type != 'm' || ack_table[process_index].acks[seq_num]);
 
   // Check size of the array
-  if (seq_num >= ack_table[process_index].size) {
+  if (ack_table[process_index].n_ack >= ack_table[process_index].size) {
     pl_realloc(process_index);
   }
 
   // Ack the packet
   ack_table[process_index].acks[seq_num] = true;
+  ack_table[process_index].n_ack += 1;
 
-  // // will return the message and sender_addr (and its length)
+  // print_ack_table();
+
+  // will return the message and sender_addr (and its length)
 }
