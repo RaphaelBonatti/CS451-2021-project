@@ -10,13 +10,12 @@
 // where %s size (in bytes) is known but %lu is not.
 // lu is 32 bits so 64 is sufficient
 #define SAFETY_SIZE 64
-// TODO: make it dynamic. Is it is ok to use global variable?
 
-struct EventLog sender_events;
-struct EventLog receiver_events;
-struct EventLog order_events;
-pthread_mutex_t lock;
-uint num_order = 0;
+static struct EventLog sender_events;
+static struct EventLog receiver_events;
+static struct EventLog order_events;
+static pthread_mutex_t lock;
+static uint num_order = 0;
 
 void init_config_info(struct ConfigInfo *configInfo, const char *filename) {
   FILE *fp;
@@ -41,7 +40,6 @@ void init_io_handler() {
 }
 
 void init_events(struct EventLog *events) {
-  printf("init event\n");
   events->buffer = calloc(INIT_SIZE, sizeof(char));
 
   if (!events->buffer) {
@@ -57,6 +55,7 @@ void init_events(struct EventLog *events) {
 void destroy_events() {
   free(sender_events.buffer);
   free(receiver_events.buffer);
+  free(order_events.buffer);
 }
 
 void realloc_events(struct EventLog *events) {

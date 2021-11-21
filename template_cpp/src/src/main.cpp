@@ -1,26 +1,17 @@
 #include <chrono>
 #include <iostream>
 #include <signal.h>
+#include <stdlib.h>
 #include <thread>
 
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+// #include <arpa/inet.h>
+// #include <netdb.h>
+// #include <sys/socket.h>
+// #include <sys/types.h>
 
 #include "fifo_broadcast_application.h"
 #include "hello.h"
-#include "io_handler.h"
 #include "parser.hpp"
-#include "perfect_links.h"
-#include "stubborn_links.h"
-
-#define FILENAME_SIZE 256
-#define N_PROCESS 9
-
-// TODO: is there another way to access it?
-char filename[FILENAME_SIZE] = {0};
-int sock_fd;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -29,15 +20,11 @@ static void stop(int) {
 
   // immediately stop network packet processing
   std::cout << "Immediately stopping network packet processing.\n";
-  close(sock_fd);
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
-  write_output(filename);
 
-  // Freeing memory
-  destroy_events();
-  pl_destroy();
+  // Stop network packet processing, write output and free memory
   app_destroy();
 
   // exit directly from signal handler
@@ -66,7 +53,8 @@ int main(int argc, char **argv) {
   std::cout << "My ID: " << parser.id() << "\n\n";
 
   size_t n_process = parser.hosts().size();
-  struct ProcessInfo processInfos[N_PROCESS];
+  struct ProcessInfo *processInfos = static_cast<struct ProcessInfo *>(
+      calloc(n_process, sizeof(struct ProcessInfo)));
   size_t i = 0;
 
   std::cout << "List of resolved hosts is:\n";
@@ -97,17 +85,13 @@ int main(int argc, char **argv) {
   std::cout << parser.configPath() << "\n\n";
 
   std::cout << "Doing some initialization...\n\n";
-  struct ConfigInfo configInfo;
-  init_config_info(&configInfo, parser.configPath());
 
-  // Init temporary log variable
-  init_io_handler();
-
-  // Copy filename to global variable, for later use in the signal handler
-  strncpy(filename, parser.outputPath(), FILENAME_SIZE - 1);
+  // Init application
+  app_init(parser.outputPath(), parser.configPath(), parser.id(), processInfos,
+           n_process);
 
   std::cout << "Broadcasting and delivering messages...\n\n";
-  run(&sock_fd, &configInfo, parser.id(), processInfos, n_process);
+  app_run();
 
   std::cout << "Broadcasting finished...\n\n";
   // After a process finishes broadcasting,

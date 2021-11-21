@@ -17,14 +17,14 @@ struct AckTable {
 };
 
 // keep a boolean for each message of each process represented by its seq_num
-struct AckTable ack_table[MAX_PROCESSES];
-uint seq_num_table[MAX_PROCESSES];
+static struct AckTable ack_table[MAX_PROCESSES];
+static uint seq_num_table[MAX_PROCESSES];
 
-uint find_process_id(struct sockaddr_in *addr) {
+uint find_process_id(struct sockaddr_in addr) {
   static uint n_process = 1;
   static uint processTable[MAX_PROCESSES][MAX_PORTS] = {0};
-  uint addr_hash = addr->sin_addr.s_addr % MAX_PROCESSES;
-  uint port_hash = addr->sin_port % MAX_PORTS;
+  uint addr_hash = addr.sin_addr.s_addr % MAX_PROCESSES;
+  uint port_hash = addr.sin_port % MAX_PORTS;
 
   uint id = processTable[addr_hash][port_hash];
 
@@ -38,19 +38,25 @@ uint find_process_id(struct sockaddr_in *addr) {
   return n_process - 1;
 }
 
-void pl_init() {
+void pl_init(int sock_fd) {
   for (size_t i = 0; i < MAX_PROCESSES; ++i) {
     ack_table[i].acks = calloc(INIT_ACK_SIZE, sizeof(bool));
     ack_table[i].size = INIT_ACK_SIZE;
     ack_table[i].n_ack = 0;
     seq_num_table[i] = 0;
   }
+
+  printf("pl_init sock_fd: %d\n", sock_fd);
+
+  sl_init(sock_fd);
 }
 
 void pl_destroy() {
   for (size_t i = 0; i < MAX_PROCESSES; ++i) {
     free(ack_table[i].acks);
   }
+
+  sl_destroy();
 }
 
 void pl_realloc(size_t process_index) {
@@ -68,7 +74,7 @@ void pl_realloc(size_t process_index) {
   ack_table[process_index].size = new_size;
 }
 
-void pl_send(int sock_fd, struct sockaddr_in *receiver_addr,
+void pl_send(int sock_fd, struct sockaddr_in receiver_addr,
              const char *message) {
   uint process_index = find_process_id(receiver_addr) - 1;
   uint seq_num = seq_num_table[process_index];
@@ -129,7 +135,7 @@ void pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
 
     // only care if it's a message type
     if (type == 'm') {
-      process_index = find_process_id(sender_addr) - 1;
+      process_index = find_process_id(*sender_addr) - 1;
     }
   } while (type != 'm' || ack_table[process_index].acks[seq_num]);
 
