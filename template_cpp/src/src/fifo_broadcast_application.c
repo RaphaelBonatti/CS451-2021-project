@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "best_effort_broadcast.h"
 #include "fifo_broadcast_application.h"
 #include "io_handler.h"
+#include "uniform_reliable_broadcast.h"
 
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <unistd.h>
@@ -52,24 +52,23 @@ void app_init(const char *_filename, const char *configpath, size_t process_id,
   init_io_handler();
 
   // Initialize best effort broadcast with the list of processes for performance
-  beb_init(sock_fd, app_addresses, n_process);
+  urb_init(sock_fd, app_process_id, app_addresses, n_process);
 }
 
 void app_destroy() {
   receive_forever = 0;
 
-  printf("app_destroy receiver_forever: %d\n", receive_forever);
-
   // Unblock thread
   shutdown(sock_fd, SHUT_RDWR);
 
   // pthread_cancel(treceiver); // kill thread
-  printf("Wainting pthread join\n");
+  // printf("Wainting pthread join\n");
+  // pthread_cancel(treceiver);
   pthread_join(treceiver, NULL);
   if (close(sock_fd)) {
     fprintf(stderr, "Error: socket cannot be closed.");
   }
-  beb_destroy();
+  urb_destroy();
   // free(app_addresses);
   free(app_processInfos);
   write_output(filename);
@@ -79,8 +78,10 @@ void app_destroy() {
 size_t get_id_by_sockaddr(struct sockaddr_in *sockaddr,
                           struct ProcessInfo *processInfos, size_t n_process) {
   for (size_t i = 0; i < n_process; ++i) {
-    if (sockaddr->sin_addr.s_addr == processInfos[i].ip &&
-        sockaddr->sin_port == processInfos[i].port) {
+    if (sockaddr->sin_port ==
+        processInfos[i]
+            .port) { // TODO: test more than just port,
+                     // sockaddr->sin_addr.s_addr == processInfos[i].ip &&
       return processInfos[i].id;
     }
   }
@@ -103,26 +104,36 @@ void get_sockaddr_by_id(struct sockaddr_in *sockaddr, size_t id,
 
 void *run_receiver(void *_args) {
   char buffer[MESSAGE_SIZE] = {0};
-
   struct sockaddr_in sender_addr;
   size_t sender_id = 0;
   // Important to give the size of the struct
   socklen_t sender_len = sizeof(sender_addr);
+  uint delivered[MAX_PROCESS] = {0};
 
   while (receive_forever) {
     // Wait for and deliver messages
-    beb_deliver(sock_fd, &sender_addr, &sender_len, buffer);
-    printf("receiver after deliver\n");
+    urb_deliver(sock_fd, &sender_addr, &sender_len, buffer);
 
     // Get sender id
-    sender_id =
-        get_id_by_sockaddr(&sender_addr, app_processInfos, app_n_process);
+    // sender_id =
+    //     get_id_by_sockaddr(&sender_addr, app_processInfos, app_n_process);
 
-    // Log the delivered message
-    log_deliver_events(buffer, sender_id);
-    printf("receiver receiver_forever: %d\n", receive_forever);
+    // to deliver in fifo order
+    for (size_t i = 0; i <= app_n_process; ++i) {
+
+      // printf("i=%ld, delivered current: %d\n", i,
+      //        pam_table[i][delivered[i]].delivered);
+
+      if (pam_table[i]) {
+        while (pam_table[i][delivered[i]].delivered == true) {
+
+          // Log the delivered message
+          log_deliver_events(pam_table[i][delivered[i]].content, i);
+          ++delivered[i];
+        }
+      }
+    }
   }
-  printf("exit receiver thread join\n");
   pthread_exit(NULL);
   return NULL;
 }
@@ -142,7 +153,7 @@ void run_sender() {
     log_send_events(buffer);
 
     // broadcast message
-    beb_broadcast(sock_fd, buffer);
+    urb_broadcast(sock_fd, buffer);
     ++message_n;
   }
 }

@@ -17,6 +17,7 @@ extern "C" {
 #define MAX_PROCESS 128
 #define N_SEND 1000
 #define MAX_ACK_SIZE 15
+#define SHIFT_MODULO 120
 
 typedef unsigned int uint;
 

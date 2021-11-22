@@ -46,8 +46,6 @@ void pl_init(int sock_fd) {
     seq_num_table[i] = 0;
   }
 
-  printf("pl_init sock_fd: %d\n", sock_fd);
-
   sl_init(sock_fd);
 }
 
@@ -60,7 +58,6 @@ void pl_destroy() {
 }
 
 void pl_realloc(size_t process_index) {
-  printf("Reallocating!\n");
   size_t new_size = 2 * ack_table[process_index].size;
   bool *prev = ack_table[process_index].acks;
   ack_table[process_index].acks =
@@ -77,7 +74,6 @@ void pl_realloc(size_t process_index) {
 void pl_send(int sock_fd, struct sockaddr_in receiver_addr,
              const char *message) {
   uint process_index = find_process_id(receiver_addr) - 1;
-  uint seq_num = seq_num_table[process_index];
 
   char buffer[MAX_HEADER_SIZE + MAX_CHARS + 1] = {0};
   char block[MAX_CHARS + 1] = {0};
@@ -100,12 +96,13 @@ void pl_send(int sock_fd, struct sockaddr_in receiver_addr,
 
     // Concatenate seq_num and message
     // TODO: Maybe useful to check if it went well
-    snprintf(buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "m|%u|%s", seq_num,
-             block);
+    snprintf(
+        buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "m|%u|%s",
+        __atomic_fetch_add(&seq_num_table[process_index], 1, __ATOMIC_SEQ_CST),
+        block);
 
     // Send the new message
     sl_send(sock_fd, receiver_addr, buffer);
-    ++seq_num_table[process_index];
   }
 }
 

@@ -11,8 +11,6 @@
 #include "linked_list.h"
 #include "stubborn_links.h"
 
-#define SHIFT_MODULO 120
-
 static struct List hashmap[MAX_PROCESS];
 static size_t n_packets = 0;
 static struct sockaddr_in addresses[MAX_PROCESS];
@@ -20,7 +18,6 @@ static uint largest_index = 0;
 static pthread_t tSendForever = 0;
 static bool send_forever = true;
 static int sock_fd;
-// static pthread_mutex_t lock;
 
 int nanosleep(const struct timespec *req, struct timespec *rem);
 
@@ -32,16 +29,13 @@ void *sl_send_forever(void *_args) {
   ts.tv_nsec = 1000000;
 
   while (send_forever) {
-    // pthread_mutex_lock(&lock);
-    printf("n = %ld\n", n_packets);
-
     for (size_t i = 0; i <= largest_index; ++i) {
-      // printList(&hashmap[i]);
       packet = hashmap[i].head;
 
       if (packet) {
         if (packet->ack) {
           deleteFirst(&hashmap[i]);
+          // printList(&hashmap[i]);
           --n_packets;
         } else {
           ssize_t send_check =
@@ -56,8 +50,6 @@ void *sl_send_forever(void *_args) {
         }
       }
     }
-
-    // pthread_mutex_unlock(&lock);
     nanosleep(&ts, &ts);
   }
 
@@ -66,11 +58,6 @@ void *sl_send_forever(void *_args) {
 }
 
 void sl_init(int _sock_fd) {
-  // if (pthread_mutex_init(&lock, NULL) != 0) {
-  //   printf("\n mutex init has failed\n");
-  //   exit(1);
-  // }
-
   sock_fd = _sock_fd;
 
   for (size_t i = 0; i < MAX_PROCESS; ++i) {
@@ -86,7 +73,6 @@ void sl_init(int _sock_fd) {
 }
 
 void sl_destroy() {
-  // pthread_mutex_lock(&lock);
   send_forever = false;
   pthread_join(tSendForever, NULL);
 
@@ -95,8 +81,6 @@ void sl_destroy() {
       deleteFirst(&hashmap[i]);
     }
   }
-
-  // pthread_mutex_unlock(&lock);
 }
 
 uint get_index(struct sockaddr_in addr) {
@@ -115,8 +99,6 @@ void sl_send(int sock_fd, struct sockaddr_in receiver_addr,
   sscanf(message, "m|%u|", &num);
 
   uint index = get_index(receiver_addr);
-
-  // printf("index: %u\n", index);
 
   if (addresses[index].sin_port == 0) {
     // copy address
@@ -142,13 +124,11 @@ void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
 
   if (recvfrom(sock_fd, message, MAX_CHARS, 0, (struct sockaddr *)sender_addr,
                sender_len) <= 0) {
-    fprintf(stderr, "Error, recvfrom failed. errno = %d\n", errno);
+    // fprintf(stderr, "Error, recvfrom failed. errno = %d\n", errno);
     pthread_exit(NULL);
   } else {
     char type = '\0';
     uint seq_num = 0;
-
-    printf("received: %s\n", message);
 
     // Decode packet: type | seq
     sscanf(message, "%c|%u|", &type, &seq_num);
@@ -161,9 +141,7 @@ void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
       // that the seq_num is the same
       // and that it has not been acked
       if (packet && packet->num == seq_num && packet->ack == false) {
-        printf("Acking packet\n");
         packet->ack = true;
-        // hashmap[index].head->ack = true;
       }
 
     } else if (type == 'm') {
@@ -178,6 +156,4 @@ void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                  (struct sockaddr *)sender_addr, sizeof(*sender_addr));
     }
   }
-
-  printf("Exit sl_deliver\n");
 }
