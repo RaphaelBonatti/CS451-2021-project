@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "fifo_broadcast_application.h"
 #include "io_handler.h"
-#include "uniform_reliable_broadcast.h"
+#include "lcb_app.h"
+#include "localized_causal_broadcast.h"
 
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <unistd.h>
@@ -52,7 +52,7 @@ void app_init(const char *_filename, const char *configpath, size_t process_id,
   init_io_handler();
 
   // Initialize best effort broadcast with the list of processes for performance
-  urb_init(sock_fd, app_process_id, app_addresses, n_process);
+  lcb_init(sock_fd, app_process_id, app_addresses, n_process);
 }
 
 void app_destroy() {
@@ -68,7 +68,7 @@ void app_destroy() {
   if (close(sock_fd)) {
     fprintf(stderr, "Error: socket cannot be closed.");
   }
-  urb_destroy();
+  lcb_destroy();
   // free(app_addresses);
   free(app_processInfos);
   write_output(filename);
@@ -109,31 +109,11 @@ void *run_receiver(void *_args) {
   // Important to give the size of the struct
   socklen_t sender_len = sizeof(sender_addr);
   uint delivered[MAX_PROCESS] = {0};
-  struct PAM** pam_table = pass_table();
+  struct PAM **pam_table = pass_table();
 
   while (receive_forever) {
     // Wait for and deliver messages
-    urb_deliver(sock_fd, &sender_addr, &sender_len, buffer);
-
-    // Get sender id
-    // sender_id =
-    //     get_id_by_sockaddr(&sender_addr, app_processInfos, app_n_process);
-
-    // to deliver in fifo order
-    for (size_t i = 0; i <= app_n_process; ++i) {
-
-      // printf("i=%ld, delivered current: %d\n", i,
-      //        pam_table[i][delivered[i]].delivered);
-
-      if (pam_table[i]) {
-        while (pam_table[i][delivered[i]].delivered == true) {
-
-          // Log the delivered message
-          log_deliver_events(pam_table[i][delivered[i]].content, i);
-          ++delivered[i];
-        }
-      }
-    }
+    lcb_deliver(sock_fd, &sender_addr, &sender_len, buffer);
   }
   pthread_exit(NULL);
   return NULL;
@@ -154,7 +134,7 @@ void run_sender() {
     log_send_events(buffer);
 
     // broadcast message
-    urb_broadcast(sock_fd, buffer);
+    lcb_broadcast(sock_fd, buffer);
     ++message_n;
   }
 }

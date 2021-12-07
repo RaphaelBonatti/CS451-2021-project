@@ -39,7 +39,7 @@ void *sl_send_forever(void *_args) {
           --n_packets;
         } else {
           ssize_t send_check =
-              sendto(sock_fd, packet->message, strlen(packet->message), 0,
+              sendto(sock_fd, packet->message, packet->n, 0,
                      (struct sockaddr *)&addresses[i], sizeof(addresses[i]));
 
           if (send_check < 0) {
@@ -87,8 +87,8 @@ uint get_index(struct sockaddr_in addr) {
   return (uint)(htons(addr.sin_port) - SHIFT_MODULO) % MAX_PROCESS;
 }
 
-void sl_send(int sock_fd, struct sockaddr_in receiver_addr,
-             const char *message) {
+void sl_send(int sock_fd, struct sockaddr_in receiver_addr, const char *message,
+             size_t n) {
   uint num = 0; // seq_num to ack
 
   struct timespec ts;
@@ -110,20 +110,20 @@ void sl_send(int sock_fd, struct sockaddr_in receiver_addr,
     }
   }
 
-  insertLast(&hashmap[index], num, false, message);
+  insertLast(&hashmap[index], num, false, message, n);
 
   ++n_packets;
   nanosleep(&ts, &ts);
 }
 
-void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
-                socklen_t *sender_len, char *message) {
-
+size_t sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
+                  socklen_t *sender_len, char *message) {
+  ssize_t n = 0;
   // Clean message to avoid left over chars
   memset(message, 0, MAX_CHARS);
 
-  if (recvfrom(sock_fd, message, MAX_CHARS, 0, (struct sockaddr *)sender_addr,
-               sender_len) <= 0) {
+  if ((n = recvfrom(sock_fd, message, MAX_CHARS, 0,
+                   (struct sockaddr *)sender_addr, sender_len)) <= 0) {
     // fprintf(stderr, "Error, recvfrom failed. errno = %d\n", errno);
     pthread_exit(NULL);
   } else {
@@ -156,4 +156,6 @@ void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                  (struct sockaddr *)sender_addr, sizeof(*sender_addr));
     }
   }
+
+  return (size_t)n;
 }

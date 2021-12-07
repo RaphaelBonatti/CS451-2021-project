@@ -26,8 +26,8 @@ void sl_init(int sock_fd);
 void sl_destroy();
 uint get_index(struct sockaddr_in addr);
 void sl_send(int sock_fd, struct sockaddr_in receiver_addr,
-             const char *message);
-void sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
+             const char *message, size_t n);
+size_t sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                 socklen_t *sender_len, char *message);
 
 #ifdef __cplusplus

@@ -71,17 +71,20 @@ void pl_realloc(size_t process_index) {
   ack_table[process_index].size = new_size;
 }
 
-void pl_send(int sock_fd, struct sockaddr_in receiver_addr,
-             const char *message) {
+void pl_send(int sock_fd, struct sockaddr_in receiver_addr, const char *message,
+             size_t n) {
   uint process_index = find_process_id(receiver_addr) - 1;
 
   char buffer[MAX_HEADER_SIZE + MAX_CHARS + 1] = {0};
   char block[MAX_CHARS + 1] = {0};
   const char *cursor = message;
   // At string terminator
-  const char *limit = message + strlen(message);
+  const char *limit = message + n;
   uintptr_t chars_left = 0;
+  size_t len = 0;
 
+  // FIXME: Need to recombine the blocks together later, need a way to know that
+  // it is a block.
   // Break message into blocks to send arbitrary long messages
   while (cursor < limit) {
     if (limit > cursor + MAX_CHARS) {
@@ -97,12 +100,13 @@ void pl_send(int sock_fd, struct sockaddr_in receiver_addr,
     // Concatenate seq_num and message
     // TODO: Maybe useful to check if it went well
     snprintf(
-        buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "m|%u|%s",
-        __atomic_fetch_add(&seq_num_table[process_index], 1, __ATOMIC_SEQ_CST),
-        block);
+        buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "m|%u|",
+        __atomic_fetch_add(&seq_num_table[process_index], 1, __ATOMIC_SEQ_CST));
+    len = strlen(buffer);
+    memcpy(buffer + len, message, n);
 
     // Send the new message
-    sl_send(sock_fd, receiver_addr, buffer);
+    sl_send(sock_fd, receiver_addr, buffer, len + n);
   }
 }
 
@@ -116,19 +120,22 @@ static void print_ack_table() {
   }
 }
 
-void pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
+size_t pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                 socklen_t *sender_len, char *message) {
   char type = '\0';
   uint seq_num = 0;
   uint process_index = 0;
+  size_t n = 0;
+  size_t metadata_len = 3 * sizeof(char) + sizeof(uint);
 
   // sl_deliver and check if the message was already delivered (i.e. same
   // sender_addr and seq_num)
   do {
-    sl_deliver(sock_fd, sender_addr, sender_len, message);
+    n = sl_deliver(sock_fd, sender_addr, sender_len, message);
 
     // Decode the packet: type | seq | message
-    sscanf(message, "%c|%u|%s", &type, &seq_num, message);
+    sscanf(message, "%c|%u|", &type, &seq_num);
+    memmove(message, message + metadata_len, n - metadata_len);
 
     // only care if it's a message type
     if (type == 'm') {
@@ -147,5 +154,6 @@ void pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
 
   // print_ack_table();
 
-  // will return the message and sender_addr (and its length)
+  // will also return the message and sender_addr (and its length)
+  return n;
 }

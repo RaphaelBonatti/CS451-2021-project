@@ -1,0 +1,7 @@
+TODO:
+1. Need to do parse config file
+
+FIXME:
+1. vector clock not shown, not a bug if 0 only
+2. content not showing
+

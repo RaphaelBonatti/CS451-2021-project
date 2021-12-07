@@ -29,13 +29,14 @@ void printList(struct List *list) {
 
 // insert link at the first location
 void insertLast(struct List *list, uint32_t num, bool ack,
-                const char *message) {
+                const char *message, size_t n) {
   // create a link
   struct Packet *link = (struct Packet *)malloc(sizeof(struct Packet));
 
   link->num = num;
   link->ack = ack;
-  strncpy(link->message, message, MESSAGE_SIZE);
+  link->n = n;
+  strncpy(link->message, message, MESSAGE_SIZE - 1);
   link->next = NULL;
 
   if (list->head != NULL) {

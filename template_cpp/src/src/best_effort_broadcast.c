@@ -13,13 +13,13 @@ void beb_init(int sock_fd, struct sockaddr_in *addrs, size_t n) {
 
 void beb_destroy() { pl_destroy(); }
 
-void beb_broadcast(int sock_fd, const char *message) {
+void beb_broadcast(int sock_fd, const char *message, size_t n) {
   for (size_t i = 0; i < n_addresses; ++i) {
-    pl_send(sock_fd, addresses[i], message);
+    pl_send(sock_fd, addresses[i], message, n);
   }
 }
 
-void beb_deliver(int sock_fd, struct sockaddr_in *sender_addr,
+size_t beb_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                  socklen_t *sender_len, char *message) {
-  pl_deliver(sock_fd, sender_addr, sender_len, message);
+  return pl_deliver(sock_fd, sender_addr, sender_len, message);
 }

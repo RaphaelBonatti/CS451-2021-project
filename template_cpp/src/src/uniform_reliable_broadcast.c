@@ -5,6 +5,7 @@
 
 #define INIT_TABLE_SIZE 8192
 
+struct PAM *pam_table[MAX_PROCESS]; // TODO: Find another way to pass in order
 static uint pam_table_size[MAX_PROCESS] = {0};
 static uint pam_table_n[MAX_PROCESS] = {0};
 static size_t n_processes;
@@ -38,15 +39,19 @@ void urb_destroy() {
   beb_destroy();
 }
 
-void urb_broadcast(int sock_fd, const char *message) {
+void urb_broadcast(int sock_fd, const char *message, size_t n) {
   char buffer[MAX_CHARS] = {0};
   static uint count = 0;
+  size_t len = 0;
 
   in_port_t port = addresses[process_id - 1].sin_port;
 
   pam_alloc(process_id, process_id, count, message);
-  snprintf(buffer, MAX_CHARS, "%d|%u|%s", port, count, message);
-  beb_broadcast(sock_fd, buffer);
+  snprintf(buffer, MAX_CHARS, "%d|%u|", port, count);
+  len = strlen(buffer);
+  memcpy(buffer + len, message, n);
+  printf("urb_broadcast: %s\n", buffer);
+  beb_broadcast(sock_fd, buffer, len + n);
   ++count;
 }
 
@@ -75,7 +80,7 @@ void pam_alloc(size_t s, size_t os, uint num, const char *content) {
   pam->delivered = false;
   pam->ack[s] = 1;
   pam->sum = 1;
-  strncpy(pam->content, content, MAX_CHARS);
+  strncpy(pam->content, content, MAX_CHARS - 1);
   pam_table_n[os]++;
 }
 
@@ -104,15 +109,18 @@ void urb_deliver(int sock_fd, struct sockaddr_in *sender_addr,
   in_port_t os_port = 0;  // original sender port
   size_t os = 0;          // original sender
   size_t s = 0;           // sender
+  size_t n = 0;
+  size_t metadata_len = sizeof(uint16_t) + 2 * sizeof(char) + sizeof(uint);
 
   do {
     // print_pam_table();
 
-    beb_deliver(sock_fd, sender_addr, sender_len, message);
+    n = beb_deliver(sock_fd, sender_addr, sender_len, message);
 
-    strncpy(buffer, message, MAX_CHARS);
+    strncpy(buffer, message, MAX_CHARS - 1);
     // Decode packet: type | seq
-    sscanf(message, "%hu|%u|%s", &os_port, &num, message);
+    sscanf(message, "%hu|%u|", &os_port, &num);
+    memmove(message, message + metadata_len, n - metadata_len);
 
     s = get_index(*sender_addr);
     os = (uint)(htons(os_port) - SHIFT_MODULO) % MAX_PROCESS;
@@ -135,7 +143,7 @@ void urb_deliver(int sock_fd, struct sockaddr_in *sender_addr,
         }
       } else {
         pam_alloc(s, os, num, message);
-        beb_broadcast(sock_fd, buffer);
+        beb_broadcast(sock_fd, buffer, n);
       }
       // }
     }

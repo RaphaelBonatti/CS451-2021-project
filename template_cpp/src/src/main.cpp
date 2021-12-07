@@ -9,7 +9,7 @@
 // #include <sys/socket.h>
 // #include <sys/types.h>
 
-#include "fifo_broadcast_application.h"
+#include "lcb_app.h"
 #include "hello.h"
 #include "parser.hpp"
 
