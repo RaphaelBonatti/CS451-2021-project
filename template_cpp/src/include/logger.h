@@ -10,22 +10,12 @@ extern "C" {
 
 typedef unsigned int uint;
 
-struct PlConfigInfo {
-  size_t n_messages;
-  size_t receiver_id;
-};
-
-struct ConfigInfo {
-  size_t n_messages;
-};
-
 struct EventLog {
   char *buffer;
   size_t size;
 };
 
-void init_config_info(struct ConfigInfo *configInfo, const char *filename);
-void init_io_handler();
+void init_logger();
 void init_events(struct EventLog *events);
 void destroy_events();
 void realloc_events(struct EventLog *events);

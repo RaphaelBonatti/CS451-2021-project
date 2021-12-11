@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "io_handler.h"
+#include "config_parser.h"
 #include "lcb_app.h"
 #include "localized_causal_broadcast.h"
+#include "logger.h"
 
 #define _XOPEN_SOURCE_EXTENDED 1
 #include <unistd.h>
@@ -16,8 +17,8 @@
 static int sock_fd;
 static char filename[FILENAME_SIZE] = {0};
 // struct sockaddr_in *app_addresses;
-static struct sockaddr_in app_addresses[MAX_PROCESS];
-static struct ConfigInfo app_configInfo;
+static struct sockaddr_in app_addresses[MAX_PROCESSES];
+static struct LCAUSALConfigInfo app_configInfo;
 static struct ProcessInfo *app_processInfos;
 static size_t app_n_process;
 static size_t app_process_id;
@@ -25,6 +26,7 @@ static struct sockaddr_in *app_process_address;
 
 // pthread_t tsender;
 static pthread_t treceiver;
+static pthread_t tsender;
 static int receive_forever;
 
 void app_init(const char *_filename, const char *configpath, size_t process_id,
@@ -46,13 +48,18 @@ void app_init(const char *_filename, const char *configpath, size_t process_id,
     exit(1);
   }
 
-  init_config_info(&app_configInfo, configpath);
+  // struct LCAUSALConfigInfo *lcausal_config_info =
+  //     calloc(1, sizeof(struct LCAUSALConfigInfo));
+  app_configInfo.type = L_CAUSAL;
+  app_configInfo.process_id = process_id;
+
+  parse_config((struct ConfigInfo *)&app_configInfo, configpath);
 
   // Init temporary log variable
-  init_io_handler();
+  init_logger();
 
   // Initialize best effort broadcast with the list of processes for performance
-  lcb_init(sock_fd, app_process_id, app_addresses, n_process);
+  lcb_init(sock_fd, app_process_id, app_addresses, n_process, &app_configInfo);
 }
 
 void app_destroy() {
@@ -64,6 +71,7 @@ void app_destroy() {
   // pthread_cancel(treceiver); // kill thread
   // printf("Wainting pthread join\n");
   // pthread_cancel(treceiver);
+  pthread_join(tsender, NULL);
   pthread_join(treceiver, NULL);
   if (close(sock_fd)) {
     fprintf(stderr, "Error: socket cannot be closed.");
@@ -105,11 +113,11 @@ void get_sockaddr_by_id(struct sockaddr_in *sockaddr, size_t id,
 void *run_receiver(void *_args) {
   char buffer[MESSAGE_SIZE] = {0};
   struct sockaddr_in sender_addr;
-  size_t sender_id = 0;
+  // size_t sender_id = 0;
   // Important to give the size of the struct
   socklen_t sender_len = sizeof(sender_addr);
-  uint delivered[MAX_PROCESS] = {0};
-  struct PAM **pam_table = pass_table();
+  // uint delivered[MAX_PROCESS] = {0};
+  // struct PAM **pam_table = pass_table();
 
   while (receive_forever) {
     // Wait for and deliver messages
@@ -119,7 +127,7 @@ void *run_receiver(void *_args) {
   return NULL;
 }
 
-void run_sender() {
+void *run_sender(void *_args) {
   char buffer[MESSAGE_SIZE] = {0};
   size_t message_n = 1;
 
@@ -134,15 +142,18 @@ void run_sender() {
     log_send_events(buffer);
 
     // broadcast message
-    lcb_broadcast(sock_fd, buffer);
+    lcb_broadcast(sock_fd, buffer, strlen(buffer));
     ++message_n;
   }
+  pthread_exit(NULL);
+  return NULL;
 }
 
 void run_receiver_sender(size_t process_id) {
   // Run one thread for sender and one for receiver
   pthread_create(&treceiver, NULL, run_receiver, NULL);
-  run_sender();
+  pthread_create(&tsender, NULL, run_sender, NULL);
+  pthread_join(tsender, NULL);
 }
 
 void app_run() {

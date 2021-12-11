@@ -28,15 +28,15 @@ void printList(struct List *list) {
 }
 
 // insert link at the first location
-void insertLast(struct List *list, uint32_t num, bool ack,
-                const char *message, size_t n) {
+void insertLast(struct List *list, uint32_t num, bool ack, const char *message,
+                size_t n) {
   // create a link
   struct Packet *link = (struct Packet *)malloc(sizeof(struct Packet));
 
   link->num = num;
   link->ack = ack;
   link->n = n;
-  strncpy(link->message, message, MESSAGE_SIZE - 1);
+  memcpy(link->message, message, n);
   link->next = NULL;
 
   if (list->head != NULL) {

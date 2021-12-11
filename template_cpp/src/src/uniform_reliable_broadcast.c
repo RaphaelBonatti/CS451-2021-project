@@ -1,13 +1,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "serializer.h"
 #include "uniform_reliable_broadcast.h"
 
 #define INIT_TABLE_SIZE 8192
 
-struct PAM *pam_table[MAX_PROCESS]; // TODO: Find another way to pass in order
-static uint pam_table_size[MAX_PROCESS] = {0};
-static uint pam_table_n[MAX_PROCESS] = {0};
+struct PAM *pam_table[MAX_PROCESSES]; // TODO: Find another way to pass in order
+static uint pam_table_size[MAX_PROCESSES] = {0};
+static uint pam_table_n[MAX_PROCESSES] = {0};
 static size_t n_processes;
 static size_t process_id;
 static struct sockaddr_in *addresses;
@@ -43,15 +44,15 @@ void urb_broadcast(int sock_fd, const char *message, size_t n) {
   char buffer[MAX_CHARS] = {0};
   static uint count = 0;
   size_t len = 0;
-
   in_port_t port = addresses[process_id - 1].sin_port;
 
-  pam_alloc(process_id, process_id, count, message);
-  snprintf(buffer, MAX_CHARS, "%d|%u|", port, count);
-  len = strlen(buffer);
-  memcpy(buffer + len, message, n);
-  printf("urb_broadcast: %s\n", buffer);
-  beb_broadcast(sock_fd, buffer, len + n);
+  pam_alloc(process_id, process_id, count, message, n);
+
+  // Encode: port, count, message
+  serialize(3, buffer, &port, sizeof(uint16_t), &count, sizeof(uint), message,
+            n);
+
+  beb_broadcast(sock_fd, buffer, sizeof(uint16_t) + sizeof(uint) + n);
   ++count;
 }
 
@@ -75,12 +76,13 @@ void check_pam_table(size_t os, uint num) {
   }
 }
 
-void pam_alloc(size_t s, size_t os, uint num, const char *content) {
+void pam_alloc(size_t s, size_t os, uint num, const char *content, size_t n) {
   struct PAM *pam = &pam_table[os][num];
   pam->delivered = false;
   pam->ack[s] = 1;
   pam->sum = 1;
-  strncpy(pam->content, content, MAX_CHARS - 1);
+  memcpy(pam->content, content, MAX_CHARS - 1);
+  pam->n = n;
   pam_table_n[os]++;
 }
 
@@ -110,30 +112,23 @@ void urb_deliver(int sock_fd, struct sockaddr_in *sender_addr,
   size_t os = 0;          // original sender
   size_t s = 0;           // sender
   size_t n = 0;
-  size_t metadata_len = sizeof(uint16_t) + 2 * sizeof(char) + sizeof(uint);
+  size_t metadata_len = sizeof(uint16_t) + sizeof(uint);
 
   do {
-    // print_pam_table();
-
     n = beb_deliver(sock_fd, sender_addr, sender_len, message);
 
-    strncpy(buffer, message, MAX_CHARS - 1);
-    // Decode packet: type | seq
-    sscanf(message, "%hu|%u|", &os_port, &num);
-    memmove(message, message + metadata_len, n - metadata_len);
+    // TODO: Check bounds i.e n <= MAX_CHARS
+    // Copy message to be stored for later usage
+    memcpy(buffer, message, n);
+
+    // Decode packet: port | seq_num
+    deserialize(2, message, &os_port, sizeof(uint16_t), &num, sizeof(uint));
 
     s = get_index(*sender_addr);
-    os = (uint)(htons(os_port) - SHIFT_MODULO) % MAX_PROCESS;
-
-    // printf("message %s, s index: %ld, os_port: %hu, num: %u, m: %s\n\n",
-    // buffer,
-    //        s, htons(os_port), num, message);
+    os = (uint)(htons(os_port) - SHIFT_MODULO) % MAX_PROCESSES;
 
     if (os <= n_processes && s <= n_processes) {
       check_pam_table(os, num);
-
-      // if (pam_table_n[os] >= num) {
-
       pam = &(pam_table[os][num]);
 
       if (pam->sum > 0) {
@@ -142,10 +137,14 @@ void urb_deliver(int sock_fd, struct sockaddr_in *sender_addr,
           pam->sum++;
         }
       } else {
-        pam_alloc(s, os, num, message);
+        // Overwrite message, remove metadata, store the message in case we need
+        // to reorder the delivery -> uniform reliable broadcast do not need to
+        // store it though, but it simplifies the implementation in our case.
+        // TODO: Check bounds 0 < n - metadata_len < MAX_CHARS
+        memmove(message, message + metadata_len, n - metadata_len);
+        pam_alloc(s, os, num, message, n);
         beb_broadcast(sock_fd, buffer, n);
       }
-      // }
     }
   } while (!pam || (pam->sum <= n_processes / 2) || // FIXME: round division up?
            (pam->delivered == true));

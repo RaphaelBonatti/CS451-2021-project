@@ -23,7 +23,7 @@ size_t get_id_by_sockaddr(struct sockaddr_in *addr,
 void get_sockaddr_by_id(struct sockaddr_in *sockaddr, size_t id,
                         struct ProcessInfo *processInfos, size_t n_process);
 void *run_receiver(void *_args);
-void run_sender();
+void *run_sender(void *_args);
 void run_receiver_sender(size_t process_id);
 void app_run();
 

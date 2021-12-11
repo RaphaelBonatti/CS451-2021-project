@@ -3,11 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common.h"
 #include "perfect_links.h"
+#include "serializer.h"
 #include "stubborn_links.h"
 
-#define MAX_PROCESSES 128
-#define MAX_PORTS 1000
 #define INIT_ACK_SIZE 1048576 // 2^20 Bytes
 
 struct AckTable {
@@ -82,32 +82,35 @@ void pl_send(int sock_fd, struct sockaddr_in receiver_addr, const char *message,
   const char *limit = message + n;
   uintptr_t chars_left = 0;
   size_t len = 0;
+  uint seq_num = 0;
+  char message_type = 'm';
 
   // FIXME: Need to recombine the blocks together later, need a way to know that
   // it is a block.
   // Break message into blocks to send arbitrary long messages
-  while (cursor < limit) {
-    if (limit > cursor + MAX_CHARS) {
-      memcpy(block, cursor, MAX_CHARS);
-      cursor += MAX_CHARS;
-    } else {
-      block[limit - cursor] = '\0';
-      chars_left = (uintptr_t)limit - (uintptr_t)cursor;
-      memcpy(block, cursor, chars_left);
-      cursor = limit;
-    }
+  // while (cursor < limit) {
+  //   if (limit > cursor + MAX_CHARS) {
+  //     memcpy(block, cursor, MAX_CHARS);
+  //     cursor += MAX_CHARS;
+  //   } else {
+  //     block[limit - cursor] = '\0';
+  //     chars_left = (uintptr_t)limit - (uintptr_t)cursor;
+  //     memcpy(block, cursor, chars_left);
+  //     cursor = limit;
+  //   }
 
-    // Concatenate seq_num and message
-    // TODO: Maybe useful to check if it went well
-    snprintf(
-        buffer, MAX_HEADER_SIZE + MAX_CHARS + 1, "m|%u|",
-        __atomic_fetch_add(&seq_num_table[process_index], 1, __ATOMIC_SEQ_CST));
-    len = strlen(buffer);
-    memcpy(buffer + len, message, n);
+  // SERIALIZE(buffer, "m", char);
+  seq_num =
+      __atomic_fetch_add(&seq_num_table[process_index], 1, __ATOMIC_SEQ_CST);
 
-    // Send the new message
-    sl_send(sock_fd, receiver_addr, buffer, len + n);
-  }
+  // Encode: message_type, seq_num, message
+  serialize(3, buffer, &message_type, sizeof(char), &seq_num, sizeof(uint),
+            message, n);
+
+  // Send the new message
+  sl_send(sock_fd, receiver_addr, buffer, sizeof(char) + sizeof(uint) + n,
+          seq_num);
+  // }
 }
 
 static void print_ack_table() {
@@ -121,12 +124,12 @@ static void print_ack_table() {
 }
 
 size_t pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
-                socklen_t *sender_len, char *message) {
+                  socklen_t *sender_len, char *message) {
   char type = '\0';
   uint seq_num = 0;
   uint process_index = 0;
   size_t n = 0;
-  size_t metadata_len = 3 * sizeof(char) + sizeof(uint);
+  size_t metadata_len = sizeof(char) + sizeof(uint);
 
   // sl_deliver and check if the message was already delivered (i.e. same
   // sender_addr and seq_num)
@@ -134,11 +137,11 @@ size_t pl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
     n = sl_deliver(sock_fd, sender_addr, sender_len, message);
 
     // Decode the packet: type | seq | message
-    sscanf(message, "%c|%u|", &type, &seq_num);
-    memmove(message, message + metadata_len, n - metadata_len);
+    deserialize(2, message, &type, sizeof(char), &seq_num, sizeof(uint));
 
     // only care if it's a message type
     if (type == 'm') {
+      memmove(message, message + metadata_len, n - metadata_len);
       process_index = find_process_id(*sender_addr) - 1;
     }
   } while (type != 'm' || ack_table[process_index].acks[seq_num]);

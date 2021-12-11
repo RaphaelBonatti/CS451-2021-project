@@ -1,4 +1,4 @@
-#include <io_handler.h>
+#include <logger.h>
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,23 +17,7 @@ static struct EventLog order_events;
 static pthread_mutex_t lock;
 static uint num_order = 0;
 
-void init_config_info(struct ConfigInfo *configInfo, const char *filename) {
-  FILE *fp;
-
-  if ((fp = fopen(filename, "r")) == NULL) {
-    printf("Error! could not open the file");
-    exit(1);
-  }
-
-  if (fscanf(fp, "%lu", &(configInfo->n_messages)) < 0) {
-    printf("Error! matching failure while reading the file");
-    exit(1);
-  }
-
-  fclose(fp);
-}
-
-void init_io_handler() {
+void init_logger() {
   init_events(&sender_events);
   init_events(&receiver_events);
   init_events(&order_events);

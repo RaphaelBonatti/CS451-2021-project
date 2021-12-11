@@ -9,11 +9,12 @@
 #include <time.h>
 
 #include "linked_list.h"
+#include "serializer.h"
 #include "stubborn_links.h"
 
-static struct List hashmap[MAX_PROCESS];
+static struct List hashmap[MAX_PROCESSES];
 static size_t n_packets = 0;
-static struct sockaddr_in addresses[MAX_PROCESS];
+static struct sockaddr_in addresses[MAX_PROCESSES];
 static uint largest_index = 0;
 static pthread_t tSendForever = 0;
 static bool send_forever = true;
@@ -60,7 +61,7 @@ void *sl_send_forever(void *_args) {
 void sl_init(int _sock_fd) {
   sock_fd = _sock_fd;
 
-  for (size_t i = 0; i < MAX_PROCESS; ++i) {
+  for (size_t i = 0; i < MAX_PROCESSES; ++i) {
     initList(&hashmap[i]);
     addresses[i].sin_port = 0;
     // addresses[i] = NULL;
@@ -84,19 +85,17 @@ void sl_destroy() {
 }
 
 uint get_index(struct sockaddr_in addr) {
-  return (uint)(htons(addr.sin_port) - SHIFT_MODULO) % MAX_PROCESS;
+  return (uint)(htons(addr.sin_port) - SHIFT_MODULO) % MAX_PROCESSES;
 }
 
 void sl_send(int sock_fd, struct sockaddr_in receiver_addr, const char *message,
-             size_t n) {
-  uint num = 0; // seq_num to ack
+             size_t n, uint num) {
+  // char message_type = '\0';
+  // uint num = 0; // seq_num to ack
 
   struct timespec ts;
   ts.tv_sec = 0;
   ts.tv_nsec = 1100000;
-
-  // Get the num to ack
-  sscanf(message, "m|%u|", &num);
 
   uint index = get_index(receiver_addr);
 
@@ -119,41 +118,46 @@ void sl_send(int sock_fd, struct sockaddr_in receiver_addr, const char *message,
 size_t sl_deliver(int sock_fd, struct sockaddr_in *sender_addr,
                   socklen_t *sender_len, char *message) {
   ssize_t n = 0;
-  // Clean message to avoid left over chars
-  memset(message, 0, MAX_CHARS);
+  char type = '\0';
+  uint seq_num = 0;
 
-  if ((n = recvfrom(sock_fd, message, MAX_CHARS, 0,
-                   (struct sockaddr *)sender_addr, sender_len)) <= 0) {
-    // fprintf(stderr, "Error, recvfrom failed. errno = %d\n", errno);
-    pthread_exit(NULL);
-  } else {
-    char type = '\0';
-    uint seq_num = 0;
+  while (type != 'm') {
+    // Clean message to avoid left over chars
+    memset(message, 0, MAX_CHARS);
 
-    // Decode packet: type | seq
-    sscanf(message, "%c|%u|", &type, &seq_num);
+    if ((n = recvfrom(sock_fd, message, MAX_CHARS, 0,
+                      (struct sockaddr *)sender_addr, sender_len)) <= 0) {
+      // fprintf(stderr, "Error, recvfrom failed. errno = %d\n", errno);
+      pthread_exit(NULL);
+    } else {
 
-    if (type == 'a') {
-      uint index = get_index(*sender_addr);
-      struct Packet *packet = hashmap[index].head;
+      // Decode packet: type | seq
+      // sscanf(message, "%c|%u|", &type, &seq_num);
+      deserialize(2, message, &type, sizeof(char), &seq_num, sizeof(uint));
 
-      // Make sure that there is a packet to ack,
-      // that the seq_num is the same
-      // and that it has not been acked
-      if (packet && packet->num == seq_num && packet->ack == false) {
-        packet->ack = true;
+      if (type == 'a') {
+        uint index = get_index(*sender_addr);
+        struct Packet *packet = hashmap[index].head;
+
+        // Make sure that there is a packet to ack, that the seq_num is the same
+        // and that it has not been acked
+        if (packet && packet->num == seq_num && packet->ack == false) {
+          packet->ack = true;
+        }
+      } else if (type == 'm') {
+        char ack_buffer[MAX_ACK_SIZE] = {0};
+        char message_type = 'a';
+
+        // prepare ack message for received message.
+        // Encode: type(a), seq_num
+        serialize(2, ack_buffer, &message_type, sizeof(char), &seq_num,
+                  sizeof(uint));
+
+        // Send ack message
+        ssize_t send_check =
+            sendto(sock_fd, ack_buffer, MAX_ACK_SIZE, 0,
+                   (struct sockaddr *)sender_addr, sizeof(*sender_addr));
       }
-
-    } else if (type == 'm') {
-      char ack_buffer[MAX_ACK_SIZE] = {0};
-
-      // prepare ack message for received message
-      snprintf(ack_buffer, MAX_ACK_SIZE, "a|%u", seq_num);
-
-      // send ack message
-      ssize_t send_check =
-          sendto(sock_fd, ack_buffer, strlen(ack_buffer), 0,
-                 (struct sockaddr *)sender_addr, sizeof(*sender_addr));
     }
   }
 
